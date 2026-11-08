@@ -234,12 +234,16 @@ MAX_429_RETRIES = 2
 RETRY_BASE_DELAY = 2.0
 
 
-def _post_whisper(endpoint: str, api_key: str, model: str, audio_path: Path) -> dict:
+def _post_whisper(
+    endpoint: str, api_key: str, model: str, audio_path: Path, language: str | None = None
+) -> dict:
     fields = {
         "model": model,
         "response_format": "verbose_json",
         "temperature": "0",
     }
+    if language:
+        fields["language"] = language
     body, boundary = _build_multipart(fields, audio_path)
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -400,12 +404,14 @@ def transcribe_chunks(
     return segments
 
 
-def _transcribe_file(backend: str, api_key: str, audio_path: Path) -> list[dict]:
+def _transcribe_file(
+    backend: str, api_key: str, audio_path: Path, language: str | None = None
+) -> list[dict]:
     """Upload one audio file and return its 0-based segments."""
     if backend == "groq":
-        response = _post_whisper(GROQ_ENDPOINT, api_key, GROQ_MODEL, audio_path)
+        response = _post_whisper(GROQ_ENDPOINT, api_key, GROQ_MODEL, audio_path, language)
     elif backend == "openai":
-        response = _post_whisper(OPENAI_ENDPOINT, api_key, OPENAI_MODEL, audio_path)
+        response = _post_whisper(OPENAI_ENDPOINT, api_key, OPENAI_MODEL, audio_path, language)
     else:
         raise SystemExit(f"Unknown whisper backend: {backend}")
     return _segments_from_response(response)
@@ -416,6 +422,7 @@ def transcribe_video(
     audio_out: Path,
     backend: str | None = None,
     api_key: str | None = None,
+    language: str | None = None,
 ) -> tuple[list[dict], str]:
     """Run the full flow: extract audio → upload → parse segments.
 
@@ -439,7 +446,7 @@ def transcribe_video(
     audio_bytes = audio_path.stat().st_size
 
     def transcribe_one(path: Path) -> list[dict]:
-        return _transcribe_file(backend, api_key, path)
+        return _transcribe_file(backend, api_key, path, language)
 
     if audio_bytes <= MAX_UPLOAD_BYTES:
         print(

@@ -150,6 +150,9 @@ Optional flags:
 - `--whisper groq|openai` — force a specific Whisper backend (default: prefer Groq if both keys exist)
 - `--no-whisper` — disable the Whisper fallback entirely (frames-only if no captions)
 - `--no-dedup` — keep near-duplicate frames. By default a frame-delta pass drops frames that are visually near-identical to the previous kept one (held slides, static screen recordings, paused video) so the frame budget goes to distinct content; the report's **Frames** line notes how many were dropped. Pass this only if the user needs every sampled frame (e.g. judging subtle frame-to-frame motion).
+- `--lang CODE[,CODE…]` — caption language(s), default `en` (e.g. `--lang ar` or `--lang ar,en`). Bounded to the named codes; `all` is rejected because it pulls hundreds of auto-translated tracks. A single code is also sent to Whisper as a language hint, which materially improves Arabic and other non-English fallback transcripts.
+- `--cookies-from-browser BROWSER[:PROFILE]` — hand yt-dlp your logged-in browser cookies (e.g. `chrome`, `firefox:default`) for age-gated, private, or rate-limited sources. Never needed for ordinary public videos.
+- `--json` — print one machine-readable JSON object (metadata, frame paths with timestamps, transcript segments, work dir) instead of the markdown report. For pipelines (Make, n8n, scripts); progress logs stay on stderr. Interactive `/watch` runs should not use it.
 
 ### Focusing on a section (higher frame rate)
 

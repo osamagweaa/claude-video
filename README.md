@@ -198,6 +198,9 @@ Other knobs (passed to `scripts/watch.py`):
 - `--whisper groq|openai` — force a specific Whisper backend.
 - `--no-whisper` — disable transcription entirely; frames only.
 - `--no-dedup` — keep near-duplicate frames. By default a frame-delta pass drops frames that are visually near-identical to the one before them (held slides, static screen recordings, paused video), so the frame budget is spent on distinct content; this flag turns that off.
+- `--lang CODE[,CODE…]` — caption language(s), default `en` (e.g. `ar`, `ar,en`). `all` is rejected on purpose. A single code is also passed to Whisper as a language hint.
+- `--cookies-from-browser BROWSER[:PROFILE]` — use your logged-in browser cookies for age-gated, private, or rate-limited sources.
+- `--json` — emit one JSON object (metadata, frames with timestamps, transcript segments) on stdout instead of the markdown report, for automation. Logs stay on stderr.
 - `--out-dir DIR` — keep working files somewhere specific (default: auto-generated tmp dir).
 
 ## Limits

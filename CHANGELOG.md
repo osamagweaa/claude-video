@@ -2,6 +2,13 @@
 
 All notable changes to `/watch` are documented here.
 
+## [Unreleased]
+
+### Added
+- **`--lang`** — choose caption language(s) (default `en`, e.g. `ar` or `ar,en`). Bounded pattern only; `all` is rejected. A single code is also sent to Whisper as a language hint.
+- **`--cookies-from-browser`** — pass logged-in browser cookies to yt-dlp for age-gated, private, or rate-limited sources.
+- **`--json`** — machine-readable output (metadata, frames, transcript segments) for Make/n8n/script pipelines; stdout is pure JSON.
+
 ## [0.2.0] — 2026-06-29
 
 ### Added
