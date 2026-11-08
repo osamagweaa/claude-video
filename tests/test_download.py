@@ -62,3 +62,42 @@ def test_download_url_requests_english_only(monkeypatch, tmp_path):
     with pytest.raises(SystemExit):
         download.download_url(URL, tmp_path / "download")
     _assert_english_only(_sub_langs(calls[0]))
+
+
+# --- --lang / --cookies-from-browser -------------------------------------------------
+
+def test_lang_builds_bounded_pattern(monkeypatch, tmp_path):
+    calls = _capture_argv(monkeypatch)
+    download.fetch_captions(URL, tmp_path / "download", lang="ar,en")
+    assert _sub_langs(calls[0]) == "ar.*,en.*"
+
+
+def test_default_lang_stays_english(monkeypatch, tmp_path):
+    calls = _capture_argv(monkeypatch)
+    download.fetch_captions(URL, tmp_path / "download")
+    assert _sub_langs(calls[0]) == "en.*"
+
+
+@pytest.mark.parametrize("bad", ["all", "ar;rm", "--exec", "a", "ar,,x y"])
+def test_bad_lang_is_rejected(bad):
+    with pytest.raises(SystemExit):
+        download.sub_langs_pattern(bad)
+
+
+def test_cookies_flag_is_passed_as_single_argv_element(monkeypatch, tmp_path):
+    calls = _capture_argv(monkeypatch)
+    download.fetch_captions(URL, tmp_path / "download", cookies_from_browser="firefox:default")
+    argv = calls[0]
+    assert argv[argv.index("--cookies-from-browser") + 1] == "firefox:default"
+
+
+def test_no_cookies_flag_by_default(monkeypatch, tmp_path):
+    calls = _capture_argv(monkeypatch)
+    download.fetch_captions(URL, tmp_path / "download")
+    assert "--cookies-from-browser" not in calls[0]
+
+
+@pytest.mark.parametrize("bad", ["--proxy x", "chrome profile", "-chrome"])
+def test_bad_cookie_value_is_rejected(bad):
+    with pytest.raises(SystemExit):
+        download._cookie_args(bad)

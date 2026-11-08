@@ -83,3 +83,21 @@ def test_no_dedup_preserves_static_frames(static_clip: Path):
     out = _run(static_clip, "--no-dedup")
     assert "near-duplicate" not in out
     assert _frame_lines(out) > 1
+
+
+def test_json_output_is_a_single_parseable_object(cut_clip: Path):
+    import json
+    out = _run(cut_clip, "--detail", "efficient", "--json")
+    data = json.loads(out)  # stdout must be pure JSON, no markdown preamble
+    assert data["detail"] == "efficient"
+    assert data["frames"] and all("timestamp_seconds" in f for f in data["frames"])
+    assert data["transcript"] == []
+    assert data["lang"] == "en"
+
+
+def test_bad_lang_fails_fast(cut_clip: Path):
+    proc = subprocess.run(
+        [sys.executable, str(WATCH), str(cut_clip), "--no-whisper", "--lang", "all"],
+        capture_output=True, text=True,
+    )
+    assert proc.returncode != 0

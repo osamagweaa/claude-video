@@ -7,6 +7,7 @@ transcribe.py can parse them without needing Whisper.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -62,7 +63,39 @@ def _pick_video(out_dir: Path) -> Path | None:
     return None
 
 
-def fetch_captions(url: str, out_dir: Path) -> dict:
+_LANG_RE = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})?$")
+_BROWSER_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_+-]*(:[^\s\x00]+)?$")
+
+
+def sub_langs_pattern(lang: str | None) -> str:
+    """Turn ``--lang`` (e.g. ``ar`` or ``ar,en``) into a bounded yt-dlp pattern.
+
+    Each code becomes ``<code>.*`` (``ar`` -> ``ar.*``). ``all`` is rejected on
+    purpose: it pulls hundreds of auto-translated YouTube tracks and stalls.
+    """
+    codes = [c.strip() for c in (lang or "en").split(",") if c.strip()]
+    if not codes:
+        codes = ["en"]
+    for code in codes:
+        if code.lower() == "all" or not _LANG_RE.match(code):
+            raise SystemExit(f"Invalid --lang code {code!r}; use ISO codes like en, ar, es, pt-BR")
+    return ",".join(f"{c}.*" for c in codes)
+
+
+def _cookie_args(cookies_from_browser: str | None) -> list[str]:
+    if not cookies_from_browser:
+        return []
+    if not _BROWSER_RE.match(cookies_from_browser):
+        raise SystemExit(f"Invalid --cookies-from-browser value {cookies_from_browser!r}")
+    return ["--cookies-from-browser", cookies_from_browser]
+
+
+def fetch_captions(
+    url: str,
+    out_dir: Path,
+    lang: str | None = "en",
+    cookies_from_browser: str | None = None,
+) -> dict:
     """Fetch metadata and best available VTT captions without downloading video."""
     if shutil.which("yt-dlp") is None:
         raise SystemExit("yt-dlp is not installed. Install with: brew install yt-dlp")
@@ -75,7 +108,8 @@ def fetch_captions(url: str, out_dir: Path) -> dict:
         "--write-info-json",
         "--write-subs",
         "--write-auto-subs",
-        "--sub-langs", "en.*",
+        "--sub-langs", sub_langs_pattern(lang),
+        *_cookie_args(cookies_from_browser),
         "--sub-format", "vtt",
         "--convert-subs", "vtt",
         "--no-playlist",
@@ -116,6 +150,8 @@ def download_url(
     url: str,
     out_dir: Path,
     audio_only: bool = False,
+    lang: str | None = "en",
+    cookies_from_browser: str | None = None,
 ) -> dict:
     if shutil.which("yt-dlp") is None:
         raise SystemExit("yt-dlp is not installed. Install with: brew install yt-dlp")
@@ -132,7 +168,8 @@ def download_url(
         "--write-info-json",
         "--write-subs",
         "--write-auto-subs",
-        "--sub-langs", "en.*",
+        "--sub-langs", sub_langs_pattern(lang),
+        *_cookie_args(cookies_from_browser),
         "--sub-format", "vtt",
         "--convert-subs", "vtt",
         "--no-playlist",
@@ -166,9 +203,14 @@ def download(
     source: str,
     out_dir: Path,
     audio_only: bool = False,
+    lang: str | None = "en",
+    cookies_from_browser: str | None = None,
 ) -> dict:
     if is_url(source):
-        return download_url(source, out_dir, audio_only=audio_only)
+        return download_url(
+            source, out_dir, audio_only=audio_only,
+            lang=lang, cookies_from_browser=cookies_from_browser,
+        )
     return resolve_local(source)
 
 

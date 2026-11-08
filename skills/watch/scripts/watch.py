@@ -7,6 +7,7 @@ then Reads each frame path to see the video.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 import tempfile
 from pathlib import Path
@@ -16,7 +17,7 @@ SCRIPT_DIR = Path(__file__).parent.resolve()
 sys.path.insert(0, str(SCRIPT_DIR))
 
 from config import frame_cap, get_config  # noqa: E402
-from download import download, fetch_captions, is_url  # noqa: E402
+from download import download, fetch_captions, is_url, sub_langs_pattern  # noqa: E402
 from frames import MAX_FPS, auto_fps, auto_fps_focus, extract_at_timestamps, extract_keyframes, extract_scene_or_uniform, format_time, get_metadata, merge_frames, parse_time, parse_timestamps  # noqa: E402
 from transcribe import filter_range, format_transcript, parse_vtt  # noqa: E402
 from whisper import load_api_key, transcribe_video  # noqa: E402
@@ -66,7 +67,29 @@ def main() -> int:
         help="Disable near-duplicate frame removal. Keeps visually identical "
              "frames (static screen recordings, held slides) instead of collapsing them.",
     )
+    ap.add_argument(
+        "--lang",
+        type=str,
+        default="en",
+        help="Caption language code(s), comma-separated (default en; e.g. ar or ar,en). "
+             "A single code is also sent to Whisper as a language hint.",
+    )
+    ap.add_argument(
+        "--cookies-from-browser",
+        type=str,
+        default=None,
+        metavar="BROWSER[:PROFILE]",
+        help="Pass your logged-in browser cookies to yt-dlp (e.g. chrome, firefox:default) "
+             "for age-gated, private, or rate-limited sources.",
+    )
+    ap.add_argument(
+        "--json",
+        action="store_true",
+        help="Print one machine-readable JSON object to stdout instead of the markdown report "
+             "(for automation: Make, n8n, scripts). Progress logs stay on stderr.",
+    )
     args = ap.parse_args()
+    sub_langs_pattern(args.lang)  # fail fast on a bad --lang before any network work
 
     config = get_config()
     detail = args.detail or str(config["detail"])
@@ -96,7 +119,10 @@ def main() -> int:
 
     if url_source:
         print("[watch] checking metadata/captions via yt-dlp…", file=sys.stderr)
-        dl = fetch_captions(args.source, work / "download")
+        dl = fetch_captions(
+            args.source, work / "download",
+            lang=args.lang, cookies_from_browser=args.cookies_from_browser,
+        )
         if dl.get("subtitle_path"):
             try:
                 transcript_segments = parse_vtt(dl["subtitle_path"])
@@ -122,6 +148,8 @@ def main() -> int:
                 args.source,
                 work / "download",
                 audio_only=audio_only,
+                lang=args.lang,
+                cookies_from_browser=args.cookies_from_browser,
             )
         else:
             print("[watch] using local file…", file=sys.stderr)
@@ -236,6 +264,9 @@ def main() -> int:
         except Exception as exc:
             print(f"[watch] subtitle parse failed: {exc}", file=sys.stderr)
 
+    lang_codes = [c.strip() for c in args.lang.split(",") if c.strip()]
+    whisper_language = lang_codes[0].split("-")[0].lower() if len(lang_codes) == 1 else None
+
     if not transcript_segments and not args.no_whisper and video_path and meta.get("has_audio"):
         backend, api_key = load_api_key(args.whisper)
         if backend and api_key:
@@ -245,6 +276,7 @@ def main() -> int:
                     work / "audio.mp3",
                     backend=backend,
                     api_key=api_key,
+                    language=whisper_language,
                 )
                 transcript_segments = filter_range(all_segments, start_sec, end_sec) if focused else all_segments
                 transcript_text = format_transcript(transcript_segments)
@@ -266,6 +298,30 @@ def main() -> int:
         print("[watch] no audio stream found — proceeding without transcription", file=sys.stderr)
 
     info = dl.get("info") or {}
+
+    if args.json:
+        print(json.dumps({
+            "source": args.source,
+            "title": info.get("title"),
+            "uploader": info.get("uploader"),
+            "duration_seconds": full_duration,
+            "detail": detail,
+            "lang": args.lang,
+            "focus": {"start": effective_start, "end": effective_end} if focused else None,
+            "frames_dir": str(work / "frames") if frames else None,
+            "frames": [
+                {
+                    "path": str(f["path"]),
+                    "timestamp_seconds": f["timestamp_seconds"],
+                    "reason": f.get("reason", "selected"),
+                }
+                for f in frames
+            ],
+            "transcript_source": transcript_source if transcript_segments else None,
+            "transcript": transcript_segments,
+            "work_dir": str(work),
+        }, ensure_ascii=False, indent=2))
+        return 0
 
     print()
     print("# watch: video report")
